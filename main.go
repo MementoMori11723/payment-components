@@ -4,6 +4,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	_ "github.com/joho/godotenv/autoload"
+	_ "github.com/stripe/stripe-go/v78"
 )
 
 func main() {
