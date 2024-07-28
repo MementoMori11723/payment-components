@@ -52,4 +52,5 @@ func main() {
 	}
 	server()
 	stripe.Key = os.Getenv("STRIPE_KEY")
+  // Here we need to add the code to handle the stripe payment
 }
