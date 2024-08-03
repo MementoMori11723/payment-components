@@ -10,7 +10,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/stripe/stripe-go/v78"
-	_ "github.com/stripe/stripe-go/v78"
 )
 
 func server() {
