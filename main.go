@@ -1,55 +1,97 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/stripe/stripe-go/v78"
+	"github.com/stripe/stripe-go/v74"
+	"github.com/stripe/stripe-go/v74/checkout/session"
 )
 
-func server() {
-	fs := http.FileServer(http.Dir("./pages"))
-	http.Handle("/", fs)
+func init() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	stripe.Key = os.Getenv("STRIPE_KEY")
+}
+
+func createCheckoutSession(w http.ResponseWriter, r *http.Request) {
+  err := godotenv.Load(".env")
+  if err != nil {
+    log.Fatal("Error loading .env file")
+  }
+  port := os.Getenv("PORT")
+  if port == "" {
+    port = "8080"
+  }
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String("usd"),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String("Test Product"),
+					},
+					UnitAmount: stripe.Int64(2000), // $20.00
+				},
+				Quantity: stripe.Int64(1),
+			},
+		},
+		Mode:       stripe.String(string(stripe.CheckoutSessionModePayment)),
+		SuccessURL: stripe.String("http://localhost:"+port+"/success"),
+		CancelURL:  stripe.String("http://localhost:"+port+"/cancel"),
+	}
+
+	session, err := session.New(params)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating checkout session: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect to the Stripe Checkout session
+	http.Redirect(w, r, session.URL, http.StatusSeeOther)
+}
+
+func renderTemplate(w http.ResponseWriter, tmpl string) {
+	t, err := template.ParseFiles("pages/" + tmpl + ".html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	t.Execute(w, nil)
+}
+
+func startServer() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		renderTemplate(w, "index")
+	})
+
+	http.HandleFunc("/success", func(w http.ResponseWriter, r *http.Request) {
+		renderTemplate(w, "success")
+	})
+
+	http.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
+		renderTemplate(w, "cancel")
+	})
+
+	// Stripe payment route
+	http.HandleFunc("/create-checkout-session", createCheckoutSession)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	server := &http.Server{Addr: ":" + port, Handler: nil}
-	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ListenAndServe(): %v", err)
-		}
-	}()
-	fmt.Println("Server is running on http://localhost:" + port)
-	fmt.Println("Press 'q' and 'Enter' to stop the server")
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		input := scanner.Text()
-		if input == "q" {
-			break
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("Error reading from input: %v", err)
-	}
-	fmt.Println("Shutting down the server...")
-	if err := server.Close(); err != nil {
-		fmt.Printf("Error shutting down server: %v\n", err)
-	}
-	time.Sleep(1 * time.Second)
-	fmt.Println("Server stopped.")
+	log.Println("Server started on :" + port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func main() {
-	if err := godotenv.Load(".env"); err != nil {
-		log.Println("No .env file found or error loading .env file")
-	}
-	server()
-	stripe.Key = os.Getenv("STRIPE_KEY")
-  // Here we need to add the code to handle the stripe payment
+	// Start the server
+	startServer()
 }
